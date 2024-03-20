@@ -6,7 +6,7 @@
 
 // ----------- Variables ----------- //
 // Delay between LED flashes
-#define FLASH_RATE 100 
+#define FLASH_RATE 500 
 
 // ----------- Functions ----------- //
 
@@ -25,21 +25,17 @@ int main(void)
     // Set PortD to have one Led on
     PORTD = (1 << 2); // 0b00000100
 
+    // Number of Bit Shifts
+    uint8_t numShifts = 5;
     // ----------- Event Loop ----------- //
 
     while(1) {    
-        LightLeds(PORTD << 1);
-        LightLeds(PORTD << 1);
-        LightLeds(PORTD << 1);
-        LightLeds(PORTD << 1);
-        LightLeds(PORTD << 1);
-
-        LightLeds(PORTD >> 1);
-        LightLeds(PORTD >> 1);
-        LightLeds(PORTD >> 1);
-        LightLeds(PORTD >> 1);
-        LightLeds(PORTD >> 1);
-
+        for(int i = 0; i < numShifts; i++) {
+            LightLeds(PORTD << 1);
+        }
+        for(int j = 0; j < numShifts; j++) {
+            LightLeds(PORTD >> 1);
+        }
 
         // PORTD = 0x00;
         //_delay_ms(30);
