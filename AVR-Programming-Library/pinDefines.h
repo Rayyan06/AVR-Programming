@@ -19,3 +19,6 @@
 #define BUTTON_DDR DDRD
 
 #define BUTTON PD2
+
+#define POT PC3          /* ADC3 */
+#define LIGHT_SENSOR PC0 /* ADC0 */

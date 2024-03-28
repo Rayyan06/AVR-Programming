@@ -1,0 +1,38 @@
+# .clang-format configuration file
+
+# Format style: LLVM (similar to the style used in LLVM projects)
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4 # Indentation width (spaces)
+UseTab: Never # Use spaces for indentation, not tabs
+TabWidth: 4 # Width of tab character (spaces)
+
+# Spaces
+SpacesBeforeTrailingComments: 1 # Add a space before trailing comments
+SpaceBeforeAssignmentOperators: true # Add a space before assignment operators
+SpaceAfterCStyleCast: false # Do not add space after C-style casts
+SpacesInAngles: false # Do not add spaces within angle brackets (templates)
+
+# Wrapping
+AllowShortBlocksOnASingleLine: false # Do not allow short blocks to be on a single line
+AllowShortFunctionsOnASingleLine: None # Do not allow short functions to be on a single line
+ColumnLimit: 100 # Maximum column width
+
+# Pointer and reference alignment
+PointerAlignment: Right # Align pointers to the right
+AlignReferences: false # Do not align references
+
+# Braces
+BraceWrapping:
+  AfterClass: false # Place opening braces on a new line after class definitions
+  AfterFunction: false # Place opening braces on a new line after function definitions
+  SplitEmptyFunction: true # Split empty functions
+  SplitEmptyRecord: true # Split empty records
+  SplitEmptyNamespace: true # Split empty namespaces
+
+# Miscellaneous
+BreakBeforeBraces: Allman # Use Allman style braces (opening braces on a new line)
+
+# Inline comment alignment
+AlignTrailingComments: true # Align trailing comments
