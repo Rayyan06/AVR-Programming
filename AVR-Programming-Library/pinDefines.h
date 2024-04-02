@@ -22,3 +22,7 @@
 
 #define POT PC3          /* ADC3 */
 #define LIGHT_SENSOR PC0 /* ADC0 */
+
+#define CAP_SENSOR_PORT PORTC
+#define CAP_SENSOR_DDR DDRC
+#define CAP_SENSOR PC1 /* ADC1 */

@@ -1,6 +1,6 @@
-/* 
+/*
 
-Template Program 
+Template Program
 
 the basic layout of an AVR program
 
@@ -12,9 +12,9 @@ the basic layout of an AVR program
 
 // ----------- #defines ----------- //
 
+// ----------- Global Variables ----------- //
 
 // ----------- Functions ----------- //
-
 
 int main(void)
 {
@@ -22,8 +22,8 @@ int main(void)
 
     // ----------- Event Loop ----------- //
 
-    while(1) {    
-        
+    while (1)
+    {
     }
     return (0);
 }
