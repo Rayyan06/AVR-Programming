@@ -30,7 +30,7 @@ static inline void initEncoderInterrupts()
 ISR(INT0_vect) /* on change of encoder pin A */
 {
     int encoderAPinState = PINB & (1 << ENCODER_A_PIN);
-    int encoderBPinState = P
+    int encoderBPinState = PINB
 }
 
 ISR(INT1_vect)
