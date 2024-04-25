@@ -40,6 +40,7 @@ int main(void)
     // ----------- Inits ----------- //
     LED_DDR = 0xff; /* All LEDs active */
     BUTTON_PORT |= (1 << BUTTON);
+    SPEAKER_DDR |= (1 << SPEAKER);
     initInterrupt0();
     // ----------- Event Loop ----------- //
 

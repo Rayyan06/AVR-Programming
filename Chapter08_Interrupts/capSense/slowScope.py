@@ -14,12 +14,12 @@ elif len(sys.argv) == 2:
     print("Insufficient arguments error: port & baudrate should either be provided, or if not provided, will be reset to defaults")
 else:
     print("Optional arguments: port, baudrate set to defaults.")
-    port = 'COM5'
+    port = 'COM6'
     baudrate = 9600
 
 
 # Open serial port
-ser = serial.Serial('COM5', 9600)  # Replace 'COMX' with your serial port name
+ser = serial.Serial('COM6', 9600)  # Replace 'COMX' with your serial port name
 
 # Flush the serial to remove unwanted data
 ser.flush()
