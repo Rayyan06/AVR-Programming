@@ -1,8 +1,8 @@
 /*
 
-Basic Rotary Encoder Read
+Basic Rotary Encoder Read and display
 
-Read encoder data and plot on serial
+Read encoder data and display on 7 Segment through shift register
 
 */
 /*
@@ -23,29 +23,25 @@ CLK -> 3
 #include <util/delay.h>
 
 // ----------- #defines ----------- //
-#define DATA_PIN PB3
-#define LATCH_PIN PB2
-#define CLOCK_PIN PB1
-#define RESET_PIN PB0
+#define DATA_PIN PB3  /* Data input for shift register */
+#define LATCH_PIN PB2 /* Latch input for HC595 Register */
+#define CLOCK_PIN PB1 /* Clock for HC595 Register */
+#define RESET_PIN PB0 /* Reset HC595 Register */
 
-#define DISPLAY_DDR DDRB
-#define DISPLAY_PORT PORTB
+#define DISPLAY_DDR DDRB   /* Display Output DDR (7 Seg) */
+#define DISPLAY_PORT PORTB /* Display Port (7 Seg )*/
 
 // ----------- #defines ----------- //
-#define ENCODER_A_PIN PD2 /* A pin */
-#define ENCODER_B_PIN PD3 /* B pin */
+#define ENCODER_A_PIN PD2  /* A pin */
+#define ENCODER_B_PIN PD3  /* B pin */
+#define ENCODER_SW_PIN PB4 /* PCINT4 */
 
 #define ENCODER_PORT PORTD
 
-#define LED_DDR DDRB
-#define LED_PORT PORTB
-
-#define LED0 PB0
-#define LED1 PB1
-#define LED2 PB2
-#define LED3 PB3
-
 #define LOG_FREQ 5 /* number of times a second to log encoder data */
+
+/* Definitions for the quadrature encoder state machine */
+// Explanation: buxtronic
 
 #define DIR_NONE 0x00 /* No step yet */
 #define DIR_CW 0x10   /* Clockwise step */
@@ -59,8 +55,6 @@ CLK -> 3
 #define R_CCW_NEXT 0x4
 #define R_CCW_FINAL 0x5
 #define R_ILLEGAL 0x7
-// ----------- Global Variables ----------- //
-
 // ----------- Global Variables ----------- //
 
 /* Array of digits for 7-segment */
@@ -97,6 +91,7 @@ const uint8_t state_table[8][4] = {
     {R_START, R_START, R_START, R_START},                                // R_ILLEGAL 07
 };
 
+// Initialize our encoder with 0's
 Encoder encoder = {0, 0, 0};
 
 //  ----------- Functions ----------- //
@@ -107,24 +102,35 @@ static inline void initEncoderInterrupts()
     EICRA |= (1 << ISC00);              /* trigger INT0 when button state changes */
     EICRA |= (1 << ISC10);              /* trigger INT1 when button state changes */
 
+    PCICR |= (1 << PCIE0);           // Enable PCINT interrupt pins 7..0
+    PCMSK0 |= (1 << ENCODER_SW_PIN); // Enable Switch Interrupt (Pin 12, PCINT4)
+
+    /* trigger PCINT*/
+
     sei(); /* enable global interrupts */
 }
 static inline uint8_t readEncoderPinState()
 {
-    return (PIND & (1 << ENCODER_A_PIN) ? 0x02 : 0x00) |
+    uint8_t pin_a = (PIND & (1 << ENCODER_A_PIN)) >> (ENCODER_A_PIN - 1);
+    uint8_t pin_b = (PIND & (1 << ENCODER_B_PIN)) >> ENCODER_B_PIN;
+
+    return pin_a | pin_b;
+
+    /*
+    return (PIND & (1 << ENCODER_A_PIN) ? 0x02  : 0x00) |
            ((PIND & (1 << ENCODER_B_PIN)) ? 0x01 : 0x00);
+    */
 }
 
 static inline void updateEncoderState()
 {
-    uint8_t pinValues = readEncoderPinState();
     // printString("Pin Value: ");
     // printBinaryByte(pinValues);
     // printString("\r\n");
     // LED_PORT = (pinValues & 0x01) ? (LED_PORT | (1 << PB0)) : (LED_PORT & ~(1 << PB0));
     // LED_PORT = (pinValues & 0x02) ? (LED_PORT | (1 << PB1)) : (LED_PORT & ~(1 << PB1));
 
-    encoder.state = state_table[encoder.state & 0x07][pinValues];
+    encoder.state = state_table[encoder.state & 0x07][readEncoderPinState()];
 }
 
 void displayNumber(uint8_t digit)
@@ -134,13 +140,18 @@ void displayNumber(uint8_t digit)
     {
         DISPLAY_PORT &= ~(1 << CLOCK_PIN);               // Write the clock low
         uint8_t bit = (digits_array[digit] >> i) & 0x01; // Grab the bit at the i'th position
-        DISPLAY_PORT =
+        //       0b00100000
+        // bit = 0b00000001
+        DISPLAY_PORT = (DISPLAY_PORT & ~(1 << DATA_PIN)) |
+                       (bit << DATA_PIN); // Clear and set the DATA_PIN to bit.
+        /* DISPLAY_PORT =
             bit ? (DISPLAY_PORT | (1 << DATA_PIN))
-                : (DISPLAY_PORT & ~(1 << DATA_PIN)); // Write the Data pin depending on the bit
+                : (DISPLAY_PORT & ~(1 << DATA_PIN)); */// Write the Data pin depending on the bit
 
-        DISPLAY_PORT |= (1 << CLOCK_PIN); // Set the clock pin high, storing the data.
+        DISPLAY_PORT |=
+            (1 << CLOCK_PIN); // Set the clock pin high, storing the data on the rising edge.
     }
-    DISPLAY_PORT |= (1 << LATCH_PIN); // Set latch pin on, sending the data over
+    DISPLAY_PORT |= (1 << LATCH_PIN); // Set latch pin on, sending the data over to the display
 }
 void printEncoderState()
 {
@@ -224,6 +235,12 @@ ISR(INT1_vect) /* on change of encoder pin B*/
     }
     // printEncoderState();
 }
+
+/* On press of encoder switch */
+ISR(__vector_PCINT4_vect)
+{
+    encoder.position = 0;
+}
 int main(void)
 {
     // ----------- Inits ----------- //
@@ -235,13 +252,13 @@ int main(void)
 
     DISPLAY_PORT |= (1 << RESET_PIN);
 
-    ENCODER_PORT |=
-        (1 << ENCODER_A_PIN) | (1 << ENCODER_B_PIN); /* enable pull-up resistors for encoder */
+    ENCODER_PORT |= (1 << ENCODER_A_PIN) | (1 << ENCODER_B_PIN) |
+                    (1 << ENCODER_SW_PIN); /* enable pull-up resistors for encoder */
     initEncoderInterrupts();
     initUSART();
 
     // Full Speed
-    clock_prescale_set(clock_div_16);
+    clock_prescale_set(clock_div_1);
 
     // Initialize State
     encoder.state = readEncoderPinState();
