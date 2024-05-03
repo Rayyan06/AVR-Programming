@@ -16,6 +16,7 @@ CLK -> 3
 */
 
 // ----------- Preamble ----------- //
+#include "LiquidCrystal.h"
 #include "USART.h"
 #include <avr/interrupt.h>
 #include <avr/io.h>
@@ -23,18 +24,19 @@ CLK -> 3
 #include <util/delay.h>
 
 // ----------- #defines ----------- //
-#define DATA_PIN PB3  /* Data input for shift register */
-#define LATCH_PIN PB2 /* Latch input for HC595 Register */
-#define CLOCK_PIN PB1 /* Clock for HC595 Register */
-#define RESET_PIN PB0 /* Reset HC595 Register */
-
-#define DISPLAY_DDR DDRB   /* Display Output DDR (7 Seg) */
-#define DISPLAY_PORT PORTB /* Display Port (7 Seg )*/
 
 // ----------- #defines ----------- //
 #define ENCODER_A_PIN PD2  /* A pin */
 #define ENCODER_B_PIN PD3  /* B pin */
 #define ENCODER_SW_PIN PB4 /* PCINT4 */
+
+#define LCD_RS_PIN PB4
+#define LCD_ENABLE_PIN PB3
+
+#define LCD_DATA_PIN_0 PD4
+#define LCD_DATA_PIN_1 PD5
+#define LCD_DATA_PIN_2 PD6
+#define LCD_DATA_PIN_3 PD7
 
 #define ENCODER_PORT PORTD
 
@@ -56,20 +58,6 @@ CLK -> 3
 #define R_CCW_FINAL 0x5
 #define R_ILLEGAL 0x7
 // ----------- Global Variables ----------- //
-
-/* Array of digits for 7-segment */
-const uint8_t digits_array[10] = {
-    0b01111110, // 0
-    0b00110000, // 1
-    0b01101101, // 2
-    0b01111001, // 3
-    0b00110011, // 4
-    0b01011011, // 5
-    0b01011111, // 6
-    0b01110000, // 7
-    0b01111111, // 8
-    0b01111011, // 9
-};
 
 // Structure for encoder data
 typedef struct
@@ -94,6 +82,9 @@ const uint8_t state_table[8][4] = {
 // Initialize our encoder with 0's
 Encoder encoder = {0, 0, 0};
 
+// Initialize our LCD
+LCD lcd = {};
+
 //  ----------- Functions ----------- //
 static inline void initEncoderInterrupts()
 {
@@ -102,8 +93,10 @@ static inline void initEncoderInterrupts()
     EICRA |= (1 << ISC00);              /* trigger INT0 when button state changes */
     EICRA |= (1 << ISC10);              /* trigger INT1 when button state changes */
 
-    PCICR |= (1 << PCIE0);           // Enable PCINT interrupt pins 7..0
-    PCMSK0 |= (1 << ENCODER_SW_PIN); // Enable Switch Interrupt (Pin 12, PCINT4)
+    /*
+        PCICR |= (1 << PCIE0);           // Enable PCINT interrupt pins 7..0
+        PCMSK0 |= (1 << ENCODER_SW_PIN); // Enable Switch Interrupt (Pin 12, PCINT4)
+        */
 
     /* trigger PCINT*/
 
@@ -133,91 +126,69 @@ static inline void updateEncoderState()
     encoder.state = state_table[encoder.state & 0x07][readEncoderPinState()];
 }
 
-void displayNumber(uint8_t digit)
+char *printEncoderState()
 {
-    DISPLAY_PORT &= ~(1 << LATCH_PIN); // Set latch off
-    for (uint8_t i = 0; i < 8; i++)
+    switch (encoder.state & 0x07)
     {
-        DISPLAY_PORT &= ~(1 << CLOCK_PIN);               // Write the clock low
-        uint8_t bit = (digits_array[digit] >> i) & 0x01; // Grab the bit at the i'th position
-        //       0b00100000
-        // bit = 0b00000001
-        DISPLAY_PORT = (DISPLAY_PORT & ~(1 << DATA_PIN)) |
-                       (bit << DATA_PIN); // Clear and set the DATA_PIN to bit.
-        /* DISPLAY_PORT =
-            bit ? (DISPLAY_PORT | (1 << DATA_PIN))
-                : (DISPLAY_PORT & ~(1 << DATA_PIN)); */// Write the Data pin depending on the bit
-
-        DISPLAY_PORT |=
-            (1 << CLOCK_PIN); // Set the clock pin high, storing the data on the rising edge.
-    }
-    DISPLAY_PORT |= (1 << LATCH_PIN); // Set latch pin on, sending the data over to the display
-}
-void printEncoderState()
-{
-    if ((encoder.state & 0x07) == R_CCW_BEGIN)
-    {
-        printString("R_CCW_BEGIN");
-    }
-    else if ((encoder.state & 0x07) == R_CCW_NEXT)
-    {
-        printString("R_CCW_NEXT");
-    }
-    else if ((encoder.state & 0x07) == R_CCW_FINAL)
-    {
-        printString("R_CCW_FINAL");
-    }
-    else if ((encoder.state & 0x07) == R_START)
-    {
-        printString("R_START");
-    }
-    else if ((encoder.state & 0x07) == R_CW_BEGIN)
-    {
-        printString("R_CW_BEGIN");
-    }
-    else if ((encoder.state & 0x07) == R_CW_NEXT)
-    {
-        printString("R_CW_NEXT");
-    }
-    else if ((encoder.state & 0x07) == R_CW_FINAL)
-    {
-        printString("R_CW_FINAL");
-    }
-    else
-    {
-        printString("ILLEGAL");
+    case R_CCW_BEGIN:
+        return "R_CCW_BEGIN";
+        break;
+    case R_CCW_NEXT:
+        return "R_CCW_NEXT";
+        break;
+    case R_CCW_FINAL:
+        return "R_CCW_FINAL";
+        break;
+    case R_START:
+        return "R_START";
+        break;
+    case R_CW_BEGIN:
+        return "R_CW_BEGIN";
+        break;
+    case R_CW_NEXT:
+        return "R_CW_NEXT";
+        break;
+    case R_CW_FINAL:
+        return "R_CW_FINAL";
+        break;
+    default:
+        return "ILLEGAL";
     }
 
     if (encoder.state & DIR_CCW)
     {
-        printString(" DIR_CCW ");
+        return "DIR_CCW ";
     }
     else if (encoder.state & DIR_CW)
     {
-        printString(" DIR_CW ");
+        return "DIR_CW ";
     }
     else
     {
-        printString(" DIR_NONE ");
+        return "DIR_NONE ";
     }
-
-    printBinaryByte(encoder.state);
-    printString("\r\n");
 }
 //  ----------- Interrupt Service Routines ----------- //
 
-ISR(INT0_vect) /* on change of encoder pin A */
+static inline void updateEncoderPosition()
 {
-    // encoder.position = 0x1;
-    updateEncoderState();
     if (encoder.state & DIR_CW)
     {
         encoder.position++;
     }
-    if (encoder.state & DIR_CCW)
+    else if (encoder.state & DIR_CCW)
     {
         encoder.position--;
     }
+    else
+    {
+    }
+}
+ISR(INT0_vect) /* on change of encoder pin A */
+{
+    // encoder.position = 0x1;
+    updateEncoderState();
+    updateEncoderPosition();
     // printEncoderState();
 }
 
@@ -225,43 +196,39 @@ ISR(INT1_vect) /* on change of encoder pin B*/
 {
     // encoder.position = 0x2;
     updateEncoderState();
-    if (encoder.state & DIR_CW)
-    {
-        encoder.position++;
-    }
-    if (encoder.state & DIR_CCW)
-    {
-        encoder.position--;
-    }
-    // printEncoderState();
+    updateEncoderPosition();
+    // printEncoderState()
 }
 
-/* On press of encoder switch */
+/* On press of encoder switch
 ISR(__vector_PCINT4_vect)
 {
     encoder.position = 0;
-}
+}*/
 int main(void)
 {
     // ----------- Inits ----------- //
 
     // LED_DDR = 0xFF; /* Configure LED DDR as output */
 
-    DISPLAY_DDR |= (1 << CLOCK_PIN) | (1 << DATA_PIN) | (1 << LATCH_PIN) |
-                   (1 << RESET_PIN); // Set display DDR to output
-
-    DISPLAY_PORT |= (1 << RESET_PIN);
-
-    ENCODER_PORT |= (1 << ENCODER_A_PIN) | (1 << ENCODER_B_PIN) |
-                    (1 << ENCODER_SW_PIN); /* enable pull-up resistors for encoder */
+    ENCODER_PORT |=
+        (1 << ENCODER_A_PIN) | (1 << ENCODER_B_PIN); /* enable pull-up resistors for encoder */
     initEncoderInterrupts();
     initUSART();
 
-    // Full Speed
-    clock_prescale_set(clock_div_1);
+    initLCD(&lcd, 1, 2, LCD_RS_PIN, LCD_ENABLE_PIN, LCD_DATA_PIN_0, LCD_DATA_PIN_1, LCD_DATA_PIN_2,
+            LCD_DATA_PIN_3);
 
-    // Initialize State
+    //  Full Speed
+    clock_prescale_set(clock_div_1);
+    // u
+    //  Initialize State
     encoder.state = readEncoderPinState();
+
+    print(&lcd, "Position: ");
+    setCursor(&lcd, 1, 0);
+    print(&lcd, "Direction");
+    print(&lcd, printEncoderState());
 
     // ----------- Event Loop ----------- //
 
@@ -270,13 +237,26 @@ int main(void)
         /* Do literally nothing else */
         // printByte(encoder.state);
         // printString("\r\n");
+        // if (encoder.position != encoder.lastPosition)
+        // {
+        //     // printByte(encoder.position);
+        //     displayNumber(encoder.position % 10);
+        //     // printString("\r\n");
+
+        //     encoder.lastPosition = encoder.position;
+        // }
+        // transmitByte(encoder.position);
+        // printByte(encoder.position);
+        // printString("\r\n");
+
         if (encoder.position != encoder.lastPosition)
         {
-            // printByte(encoder.position);
-            displayNumber(encoder.position % 10);
-            // printString("\r\n");
+            setCursor(&lcd, 0, 9);
+            printNumber(&lcd, encoder.position);
+            print(&lcd, "  ");
             encoder.lastPosition = encoder.position;
         }
+        // clear(&lcd);
     }
     return (0);
 }
