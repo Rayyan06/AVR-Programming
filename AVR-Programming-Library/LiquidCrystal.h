@@ -19,7 +19,7 @@
 #define LCD_8BIT_MODE 0x10
 #define LCD_4BIT_MODE 0x00
 
-#define LCD_2LINE 0x02
+#define LCD_2LINE 0x08
 #define LCD_1LINE 0x00
 
 #define LCD_5x10DOTS 0x04
@@ -29,7 +29,7 @@
 
 #define LCD_POWER_ON_DELAY_TIME 50         /* milliseconds(ms) */
 #define LCD_FUNCTION_SET_ATTEMPT_TIME 4500 /* microseconds(us) */
-#define LCD_DEBUG_DELAY _delay_ms(5000)    /* milliseconds (ms) */
+#define LCD_DEBUG_DELAY _delay_ms(100)     /* milliseconds (ms) */
 #define LCD_DEBUG_CLOCK_DELAY _delay_ms(300)
 
 #define LCD_DATA_DDR DDRD
@@ -53,7 +53,7 @@ typedef struct
 /* Initializes the LCD with the pins */
 void initLCD(LCD *lcd, uint8_t fourbitmode, uint8_t lines, uint8_t rs, uint8_t enable, uint8_t d5,
              uint8_t d6, uint8_t d7, uint8_t d8);
-// h
+// hi
 /*
 Sends a data or instruction to the LCD
     value: what to send
@@ -77,6 +77,13 @@ void print(LCD *lcd, const char string[]);
 
 /* Prints a number to the LCD screen */
 void printNumber(LCD *lcd, uint8_t n);
+
+/* prints a int16_t to the lcd screen */
+void printInt16(LCD *lcd, int16_t n);
+
+void printFloat(LCD *lcd, float n, uint8_t digits);
+
+void printUint16(LCD *lcd, uint16_t n);
 
 /* Clears the display */
 void clear(LCD *lcd);

@@ -102,9 +102,9 @@ void pulseEnable(LCD *lcd)
 {
     LCD_OTHER_PORT &= ~(1 << lcd->_enable_pin); // Turn off enable pin
     _delay_us(1);                               // wait
-
     LCD_OTHER_PORT |= (1 << lcd->_enable_pin);  // Turn on enable pin
     _delay_us(1);                               // enable pulse must be >450 ns
+
     LCD_OTHER_PORT &= ~(1 << lcd->_enable_pin); // Turn off enable pin
     _delay_us(100);                             // commands need >37 us to settle
 }
@@ -118,6 +118,7 @@ void write(LCD *lcd, uint8_t value)
         LCD_DATA_PORT = ((value >> i) & 0x01) ? LCD_DATA_PORT | (1 << lcd->_data_pins[i])
                                               : LCD_DATA_PORT & ~(1 << lcd->_data_pins[i]);
     }
+
     pulseEnable(lcd);
 }
 
@@ -151,8 +152,8 @@ void print(LCD *lcd, const char string[])
 
 void printNumber(LCD *lcd, uint8_t n)
 {
-    char buffer[8 * sizeof(uint8_t) + 1];    // Allow 1 more for null terminator
-    char *str = &buffer[sizeof(buffer) - 1]; // Pointer to last in buffer
+    char buffer[4 + 1];     // Allow 1 more for null terminator
+    char *str = &buffer[4]; // Pointer to last in buffer
 
     *str = '\0';
 
@@ -164,4 +165,59 @@ void printNumber(LCD *lcd, uint8_t n)
     } while (n);
 
     print(lcd, str);
+}
+void printInt16(LCD *lcd, int16_t n)
+{
+    if (n < 0)
+    {
+        send(lcd, '-', 1); // print the negative sign
+        n = -n;            // make n positive
+    }
+
+    char buffer[6];         // 6 characters are enough to hold an int16_t value (max 32767)
+    char *str = &buffer[5]; // Pointer to last in buffer
+    *str = '\0';
+
+    do
+    {
+        *--str = '0' + (n % 10);
+        n /= 10;
+    } while (n);
+
+    print(lcd, str);
+}
+void printUint16(LCD *lcd, uint16_t n)
+{
+    char buffer[5];         // 5 characters are enough to hold a uint16_t value (max 65535)
+    char *str = &buffer[4]; // Pointer to last in buffer
+    *str = '\0';
+
+    do
+    {
+        *--str = '0' + (n % 10);
+        n /= 10;
+    } while (n);
+
+    print(lcd, str);
+}
+void printFloat(LCD *lcd, float n, uint8_t digits)
+{
+    /* print the float to the LCD with the number of digits*/
+    uint8_t integer = (uint8_t)n; // extract the integer part
+    float fraction = n - integer; // extract the fractional part
+
+    printNumber(lcd, integer); // print the integer part
+
+    if (digits > 0)
+    {
+        send(lcd, '.', 1); // print the decimal point
+
+        while (digits-- > 0)
+        {
+            fraction *= 10;                    // shift the fractional part
+            uint8_t digit = (uint8_t)fraction; // extract the next digit
+            send(lcd, '0' + digit, 1);         // print the digit
+            fraction -= digit;                 // remove the digit from the fractional part
+        }
+    }
 }
