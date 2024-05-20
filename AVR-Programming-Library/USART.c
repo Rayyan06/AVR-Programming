@@ -149,6 +149,6 @@ uint8_t getNumber(void)
         ones = thisChar;
         thisChar = receiveByte(); /* get a new character */
         transmitByte(thisChar);   /* echo */
-    } while (thisChar != '\r');   /* until type return */
+    } while (thisChar != '\r'); /* until type return */
     return (100 * (hundreds - '0') + 10 * (tens - '0') + ones - '0');
 }

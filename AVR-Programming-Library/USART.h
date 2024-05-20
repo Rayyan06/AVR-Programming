@@ -32,6 +32,10 @@ void readString(char myString[], uint8_t maxLength);
 
 void printByte(uint8_t byte);
 /* Prints a byte out as its 3-digit ascii equivalent */
+
+void printUint16Byte(uint16_t byte);
+/* prints uint16t byte */
+
 void printWord(uint16_t word);
 /* Prints a word (16-bits) out as its 5-digit ascii equivalent */
 

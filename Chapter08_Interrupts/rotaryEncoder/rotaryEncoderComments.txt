@@ -1,0 +1,160 @@
+#define LCD_RS_PIN PB4
+#define LCD_ENABLE_PIN PB3
+
+#define LCD_DATA_PIN_0 PD4
+#define LCD_DATA_PIN_1 PD5
+#define LCD_DATA_PIN_2 PD6
+#define LCD_DATA_PIN_3 PD7
+        /*
+        printString("Current Position: ");
+        printByte(*dataIndex);
+        printString("\r\n");
+        _delay_ms(50);
+*/
+
+        // if (loggingComplete && 0x01)
+        // {
+        //     cli();
+        //     sendData();
+
+        //     /* Reset everything */
+        //     loggingComplete = 0;
+        //     TCNT1 = 0;
+        //     positionDataIndex = position_data;
+        //     sei();
+        // }
+
+        // printByte(encoder.state);
+        // printString("\r\n");
+        // if (encoder.position != encoder.lastPosition)
+        // {
+        //     // printByte(encoder.position);
+        //     displayNumber(encoder.position % 10);
+        //     // printString("\r\n");
+
+        //     encoder.lastPosition = encoder.position;
+        // }
+        // transmitByte(encoder.position);
+        // printByte(encoder.position);
+        // printString("\r\n");
+        /*
+        _delay_ms(50);
+        if (encoder.position != encoder.lastPosition)
+        {
+            setCursor(&lcd, 0, 4);
+            printUint16(&lcd, encoder.position);
+            print(&lcd, "  ");
+            setCursor(&lcd, 1, 3);
+            printTime(time);
+            print(&lcd, "  ");
+            encoder.lastPosition = encoder.position;
+            // encoder.lastAngle = encoder.angle;
+        }
+        */
+        /*
+        if (encoder.state != encoder.lastState)
+        {
+            setCursor(&lcd, 1, 14);
+            send(&lcd, (encoder.state & 0x01) ? 0xFF : ' ', 1);
+            send(&lcd, (encoder.state & 0x02) ? 0xFF : ' ', 1);
+            setCursor(&lcd, 1, 4);
+            print(&lcd, printEncoderState());
+            encoder.lastState = encoder.state;
+        }*/
+
+        // clear(&lcd);
+
+            // encoder.angle = encoder.position * 0.0125664;
+}
+
+// static inline void logTime()
+// {
+//     if (!(positionDataIndex == lastIndex)) /* If we haven't reached the last element */
+//     {
+//         positionDataIndex->angle = encoder.position;
+//         positionDataIndex->time = TCNT1;
+
+//         positionDataIndex++;
+//     }
+//     else
+//     {
+
+//         loggingComplete = 1;
+//     }
+//     TCNT1 = 0; /* Reset the timer */
+// }
+// void sendData()
+// {
+//     for (uint8_t i = 0; i < NUMBER_OF_SAMPLES - 1; i++)
+//     {
+//         printUint16Byte(position_data[i].angle);
+//         transmitByte('\r');
+
+//         printUint16Byte(position_data[i].time);
+//         transmitByte('\r');
+//         transmitByte('\n');
+//         _delay_ms(20);
+//     }
+// }
+/*
+
+static inline void printTime(uint16_t time)
+{
+    // setCursor(&lcd, 1, 3);
+    // printInt16(&lcd, time >> 4);
+}
+*/
+
+void printEncoderState()
+{
+    // Print the state part
+    switch (encoder.state & 0x07)
+    {
+    case R_CCW_BEGIN:
+        printString("CCW_BEGIN");
+        break;
+    case R_CCW_NEXT:
+        printString("CCW_NEXT ");
+        break;
+    case R_CCW_FINAL:
+        printString("CCW_FINAL");
+        break;
+    case R_START:
+        printString("START    ");
+        break;
+    case R_CW_BEGIN:
+        printString("CW_BEGIN ");
+        break;
+    case R_CW_NEXT:
+        printString("CW_NEXT  ");
+        break;
+    case R_CW_FINAL:
+        printString("CW_FINAL ");
+        break;
+    default:
+        printString("ILLEGAL  ");
+        break;
+    }
+
+    // Print a space to separate state and direction
+    printString(" ");
+
+    // Print the direction part
+    if (encoder.state & DIR_CCW)
+    {
+        printString("DIR_CCW");
+    }
+    else if (encoder.state & DIR_CW)
+    {
+        printString("DIR_CW");
+    }
+    else
+    {
+        printString("DIR_NONE");
+    }
+}
+
+
+    // initLCD(&lcd, 1, 2, LCD_RS_PIN, LCD_ENABLE_PIN, LCD_DATA_PIN_0, LCD_DATA_PIN_1,
+    // LCD_DATA_PIN_2,
+    //        LCD_DATA_PIN_3);

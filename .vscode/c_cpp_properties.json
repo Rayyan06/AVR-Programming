@@ -4,7 +4,8 @@
             "name": "win32",
             "includePath": [
                 "${workspaceFolder}/**",
-                "${workspaceFolder}/AVR-Programming-Library"
+                "${workspaceFolder}/AVR-Programming-Library",
+                "${workspaceFolder}/Chapter08_Interrupts/rotaryEncoder/unity/src"
             ],
             "defines": [
                 "_DEBUG",
