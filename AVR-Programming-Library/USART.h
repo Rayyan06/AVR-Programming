@@ -22,6 +22,8 @@ void initUSART(void);
    When you call receiveByte() your program will hang until
    data comes through.  We'll improve on this later. */
 void transmitByte(uint8_t data);
+void transmitInt16Byte(int16_t data);
+void transmitUInt16Byte(uint16_t data);
 uint8_t receiveByte(void);
 
 void printString(const char myString[]);

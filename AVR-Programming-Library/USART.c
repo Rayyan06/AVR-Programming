@@ -34,11 +34,28 @@ void initUSART(void)
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); /* 8 data bits, 1 stop bit */
 }
 
+void closeUSART(void)
+{
+    // Disable the transmitter & reciever
+    UCSR0B &= ~(1 << TXEN0) | (1 << RXEN0);
+}
 void transmitByte(uint8_t data)
 {
     /* Wait for empty transmit buffer */
     loop_until_bit_is_set(UCSR0A, UDRE0);
     UDR0 = data; /* send data */
+}
+
+void transmitInt16Byte(int16_t data)
+{
+    transmitByte((uint8_t)(data & 0xFF));
+    transmitByte((uint8_t)(data << 8));
+}
+
+void transmitUInt16Byte(uint16_t data)
+{
+    transmitByte((uint8_t)(data & 0xFF));
+    transmitByte((uint8_t)(data << 8));
 }
 
 uint8_t receiveByte(void)
@@ -91,6 +108,7 @@ void printByte(uint8_t byte)
 
 void printWord(uint16_t word)
 {
+
     transmitByte('0' + (word / 10000));       /* Ten-thousands */
     transmitByte('0' + ((word / 1000) % 10)); /* Thousands */
     transmitByte('0' + ((word / 100) % 10));  /* Hundreds */

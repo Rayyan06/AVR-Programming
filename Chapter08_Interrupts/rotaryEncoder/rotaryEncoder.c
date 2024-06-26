@@ -22,45 +22,64 @@ CLK -> 3
 #include <avr/io.h>
 #include <avr/power.h>
 #include <util/delay.h>
+#include <util/setbaud.h>
 
 // ----------- Global Variables ----------- //
 volatile uint16_t time;
 
 // Initialize our encoder with 0's
-volatile Encoder encoder = {0, 0, 0, 0};
+volatile Encoder encoder = {0, 0, 0};
 
-typedef struct
+// Initialize our buffer
+volatile circular_buffer_t tx_buffer = {
+    .head = 0, .tail = 0, .data = {{0, 0}, {0, 0}, {0, 0}, {0, 0}}};
+volatile uint8_t loggingComplete = 0;
+
+// Check if the buffer is empty
+uint8_t buffer_is_empty(volatile circular_buffer_t *buffer)
 {
-    uint16_t time;  /* In milliseconds */
-    uint16_t angle; /* In Degrees */
-} DataPoint;
-
-// TODO: Set up circular buffer
-// Buffer for encoder data
-DataPoint encoder_buffer[NUMBER_OF_SAMPLES];
-volatile DataPoint *buffer_index = encoder_buffer;
-volatile uint8_t buffer_full = 0; // Flag to indicate if the buffer is full
-const DataPoint *last_index = &encoder_buffer[NUMBER_OF_SAMPLES - 1];
-
-// DataPoint position_data[NUMBER_OF_SAMPLES];
-// volatile DataPoint *positionDataIndex = position_data;
-
-// const DataPoint *lastIndex = &position_data[NUMBER_OF_SAMPLES - 1];
-
-// volatile uint8_t loggingComplete = 0;
+    return buffer->head == buffer->tail;
+}
 //   ----------- Functions ----------- //
+void initBasicUSART(void)
+{                         /* requires BAUD */
+    UBRR0H = UBRRH_VALUE; /* defined in setbaud.h */
+    UBRR0L = UBRRL_VALUE;
+#if USE_2X
+    UCSR0A |= (1 << U2X0);
+#else
+    UCSR0A &= ~(1 << U2X0);
+#endif
+    /* Enable USART transmitter/receiver */
+    UCSR0B = (1 << TXEN0) | (1 << RXEN0);
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); /* 8 data bits, 1 stop bit */
 
+    // Initialize USART and enable transmit complete interrupt
+    UCSR0B |= (1 << TXCIE0); // Enable USART transmit complete interrupt
+}
+
+/* Timer 1 is for timing the difference between interrupt triggers, and the real time with CTC */
 static inline void initTimer1(void)
 {
     /* Timer 1 is the 16 Bit timer */
-    // TCCR1B |= (1 << WGM12);              /* CTC Mode */
+    TCCR1B |= (1 << WGM12); /* CTC Mode */
     /* Normal mode (default), just counting */
     TCCR1B |= (1 << CS11) | (1 << CS10); /* Set the CPU Prescaler at /64 prescale, 16 Mhz / 64 =
                                             250000 ticks per second or 250 ticks per millisecond */
     // Set the compare value
-    // OCR1A = COMPARE_VALUE;
+    OCR1A = COMPARE_VALUE;
     // // Enable Compare Match A interrupt
-    // TIMSK1 |= (1 << OCIE1A);
+    TIMSK1 |= (1 << OCIE1A);
+}
+
+static inline void initButton(void)
+{
+
+    BUTTON_DDR &= ~(1 << BUTTON);
+    BUTTON_PORT |= (1 << BUTTON); /* Enable pull up resistor */
+
+    PCICR |= (1 << PCIE0);   // Enable pin change interrupt for PCINT0 to PCINT7
+    PCMSK0 |= (1 << PCINT0); // Enable Mask for PCINT0
 }
 static inline void initEncoderInterrupts()
 {
@@ -71,7 +90,7 @@ static inline void initEncoderInterrupts()
 }
 static inline uint8_t readEncoderPinState()
 {
-    uint8_t pin_a = (PIND & (1 << ENCODER_A_PIN)) >> (ENCODER_A_PIN - 1);
+    uint8_t pin_a = (PIND & (1 << ENCODER_A_PIN) >> 1);
     uint8_t pin_b = (PIND & (1 << ENCODER_B_PIN)) >> ENCODER_B_PIN;
 
     return pin_a | pin_b;
@@ -84,17 +103,10 @@ static inline uint8_t readEncoderPinState()
 
 static inline void updateEncoderState()
 {
-    // printString("Pin Value: ");
-    // printBinaryByte(pinValues);
-    // printString("\r\n");
-    // LED_PORT = (pinValues & 0x01) ? (LED_PORT | (1 << PB0)) : (LED_PORT & ~(1 << PB0));
-    // LED_PORT = (pinValues & 0x02) ? (LED_PORT | (1 << PB1)) : (LED_PORT & ~(1 << PB1));
-
     encoder.state = state_table[encoder.state & 0x07][readEncoderPinState()];
 }
 
 //  ----------- Interrupt Service Routines ----------- //
-
 static inline void updateEncoderPosition()
 {
     if (encoder.state & DIR_CW)
@@ -109,93 +121,226 @@ static inline void updateEncoderPosition()
     {
         // DIR_NONE, don't change position
     }
+
+    printWord(encoder.position);
+    printString("\r\n");
 }
 
-static inline void printData()
+/*
+static inline void printData(const DataPoint *datapoint)
 {
-    for (uint8_t i = 0; i < NUMBER_OF_SAMPLES - 1; i++)
+
+    transmitInt16Byte(datapoint->position);
+    transmitByte('r');
+    transmitUInt16Byte(datapoint->time);
+    transmitByte('\r');
+    transmitByte('\n');
+}
+*/
+
+/*
+static inline void endLogging()
+{
+    // Close Interrupts
+    // cli();
+    transmitByte(0x03); // ETX character
+    transmitByte('\n');
+}
+*/
+
+/* Adds data */
+void buffer_write(volatile circular_buffer_t *buffer, DataPoint data)
+{
+    // Calculate the next write index
+    uint8_t next_head = (buffer->head + 1) % TX_BUFFER_SIZE;
+    uint8_t buffer_is_full = (next_head == buffer->tail);
+
+    if (!buffer_is_full)
     {
-        printWord(encoder_buffer[i].angle);
-        transmitByte('\r');
-        printWord(encoder_buffer[i].time);
-        transmitByte('\r');
-        transmitByte('\n');
+        // Update the data at the head pointer
+        buffer->data[buffer->head] = data;
+
+        // Update the head pointer forward, or loop around
+        buffer->head = next_head;
     }
-    buffer_index = encoder_buffer;
-    buffer_full = 0;
+}
+DataPoint buffer_get(volatile circular_buffer_t *buffer)
+{
+    DataPoint point = buffer->data[buffer->tail];
+
+    // Update the tail pointer
+    buffer->tail = (buffer->tail + 1) % TX_BUFFER_SIZE;
+
+    return point;
 }
 
-static inline void loadDataIntoBuffer()
+void USART_Transmit(DataPoint data)
 {
-    // As long as we havent't reached the last index
+    buffer_write(&tx_buffer, data);
+    // Enable Data Register Empty Interrupt
+    UCSR0B |= (1 << UDRIE0);
+}
+void onEncoderInterrupt()
+{
+    updateEncoderState();
+    updateEncoderPosition();
 
-    if (!(buffer_index == last_index))
-    {
-        buffer_index->angle = encoder.position;
-        buffer_index->time = TCNT1;
-        buffer_index++;
-    }
-    else
-    {
-        buffer_full = 1; // Buffer is full
-    }
+    DataPoint datapoint = {TCNT1, encoder.position & 0xFF};
+    USART_Transmit(datapoint);
+
     TCNT1 = 0;
 }
 ISR(INT0_vect) /* on change of encoder pin A */
 {
-    // encoder.position = 0x1;
-    updateEncoderState();
-    updateEncoderPosition();
-    // logTime();
-    //  printEncoderState();
-    // loadDataIntoBuffer();
-    // printEncoderState();
+
+    onEncoderInterrupt();
 }
 
 ISR(INT1_vect) /* on change of encoder pin B*/
 {
-    updateEncoderState();
-    updateEncoderPosition();
-    // logTime();
+    onEncoderInterrupt();
+}
 
-    // printEncoderState()
-    loadDataIntoBuffer();
-    // printEncoderState();
+ISR(PCINT0_vect)
+{
+    // Debounce first
+    if ((BUTTON_PIN & (1 << BUTTON))) /* If the button has just been pressed */
+    {
+        _delay_ms(DEBOUNCE_TIME);
+        if ((BUTTON_PIN & (1 << BUTTON))) /* Now if it genuinely got pressed */
+        {
+            /* Start the counter again */
+            sei();
+            loggingComplete = 0;
+            TCNT1 = 0;
+        }
+    }
+}
+
+/* Timer1 Compare A match Interrupt Service Routine */
+ISR(TIMER1_COMPA_vect)
+{
+
+    DataPoint datapoint = {COMPARE_VALUE, encoder.position & 0xFF};
+    USART_Transmit(datapoint);
+
+    // Enable the USART Data Transmit Ready Interrupt, to trigger ISR
+    // UCSR0B |= (1 << UDRIE0);
+
+    PORTB ^= (1 << PB1);
+}
+
+/* USART Data Register Empty Interrupt Service Routine */
+ISR(USART_UDRE_vect)
+{
+    static uint8_t byte_index = 0;
+    static DataPoint current_data;
+
+    // Check if the buffer is not empty
+    if (byte_index == 0)
+    {
+        if (buffer_is_empty(&tx_buffer))
+        {
+            UCSR0B &= ~(1 << UDRIE0);
+            return;
+        }
+        // Read the data from the buffer, only do this once initially
+        current_data = buffer_get(&tx_buffer);
+    }
+
+    /*
+        switch (byte_index)
+        {
+        case 0:
+            printByte(current_data.pos_H);
+            break;
+        case 1:
+            printByte(current_data.pos_L);
+            break;
+        case 2:
+            printByte(' ');
+            break;
+        case 3:
+            printByte(current_data.time_H);
+            break;
+        case 4:
+            printByte(current_data.time_L);
+            break;
+        case 5:
+            printByte('\r');
+            break;
+        case 6:
+            printByte('\n');
+            break;
+        }
+        */
+
+    byte_index = (byte_index + 1) % 7;
+    if (byte_index == 0 && buffer_is_empty(&tx_buffer))
+    {
+        UCSR0B &= ~(1 << UDRIE0);
+    }
 }
 
 int main(void)
 {
     // ----------- Inits ----------- //
 
-    // LED_DDR = 0xFF; /* Configure LED DDR as output */
+    DDRB |= (1 << PB1); /* Configure LED DDR as output */
 
     ENCODER_PORT |=
         (1 << ENCODER_A_PIN) | (1 << ENCODER_B_PIN); /* enable pull-up resistors for encoder */
 
+    initButton();
+    initBasicUSART();
     initTimer1();
     initEncoderInterrupts();
-    initUSART();
 
     sei(); /* enable global interrupts */
 
     //  Full Speed
     clock_prescale_set(clock_div_1);
 
-    //  Initialize State
+    //  Initialize State with a read
     encoder.state = readEncoderPinState();
 
-    /*print(&lcd, "Pos: ");
+    // Initialize the buffer head and tail
+    tx_buffer.head = 0;
+    tx_buffer.tail = 0;
 
-    setCursor(&lcd, 1, 0);
-    send(&lcd, THETA, 1); // Write 'theta' symbol
-    print(&lcd, ": ");
-*/
     // ----------- Event Loop ----------- //
 
     while (1)
     {
-        if (buffer_full)
-            printData();
+        // transmitByte('[');
+
+        // for (int i = 0; i < TX_BUFFER_SIZE; i++)
+        //{
+        //  printWord(tx_buffer.data[i].position);
+        //  transmitByte(' ');
+        /*
+        ** DO LITERALLY NOTHING **😂
+        */
+        // if (!loggingComplete)
+        // {
+        //     DataPoint data;
+
+        //     if (buffer_get(&data))
+        //     {
+        //         printData(&data);
+        //     }
+
+        //     /*
+        //     if ((TCNT1 > DATA_END_THRESHOLD))
+        //     {
+        //         TCNT1 = 0;
+        //         endLogging();
+        //         loggingComplete = 1;
+        //     }
+        //     */
+        // }
+        //}
+        // printString("]\r\n");
     }
-    return (0);
+    return 0;
 }
