@@ -45,10 +45,12 @@
 #define BUTTON_PORT PORTB
 
 #define DEBOUNCE_TIME 10 /* Debounce time (ms)*/
+
+volatile int16_t position = 0;
 // ----------- Structures ----------- //
 typedef struct
 {
-    volatile uint16_t position;
+    volatile uint8_t position;
     volatile uint8_t state;
     volatile uint8_t lastState;
 } Encoder;
@@ -56,8 +58,8 @@ typedef struct
 // TODO: #1 change structure of DataPoint to have high byte and low byte for position AND time?
 typedef struct
 {
-    uint8_t time_L;
-    uint8_t pos_L;
+    uint16_t time;
+    uint16_t position;
 } DataPoint;
 
 // Buffer for encoder data

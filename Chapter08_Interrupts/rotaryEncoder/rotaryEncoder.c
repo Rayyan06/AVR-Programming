@@ -35,6 +35,11 @@ volatile circular_buffer_t tx_buffer = {
     .head = 0, .tail = 0, .data = {{0, 0}, {0, 0}, {0, 0}, {0, 0}}};
 volatile uint8_t loggingComplete = 0;
 
+void initBuffer(volatile circular_buffer_t *buffer)
+{
+    buffer->head = 0;
+    buffer->tail = 0;
+}
 // Check if the buffer is empty
 uint8_t buffer_is_empty(volatile circular_buffer_t *buffer)
 {
@@ -90,7 +95,7 @@ static inline void initEncoderInterrupts()
 }
 static inline uint8_t readEncoderPinState()
 {
-    uint8_t pin_a = (PIND & (1 << ENCODER_A_PIN) >> 1);
+    uint8_t pin_a = (PIND & (1 << ENCODER_A_PIN)) >> (ENCODER_A_PIN - 1);
     uint8_t pin_b = (PIND & (1 << ENCODER_B_PIN)) >> ENCODER_B_PIN;
 
     return pin_a | pin_b;
@@ -111,32 +116,20 @@ static inline void updateEncoderPosition()
 {
     if (encoder.state & DIR_CW)
     {
-        encoder.position++;
+        printString("++");
+        position = position + 2;
     }
     else if (encoder.state & DIR_CCW)
     {
-        encoder.position--;
-    }
-    else
-    {
-        // DIR_NONE, don't change position
+        printString("--");
+        position = position - 2;
     }
 
-    printWord(encoder.position);
+    printWord(position); // Print low byte
+    printString(" ");
+    printBinaryByte(encoder.state);
     printString("\r\n");
 }
-
-/*
-static inline void printData(const DataPoint *datapoint)
-{
-
-    transmitInt16Byte(datapoint->position);
-    transmitByte('r');
-    transmitUInt16Byte(datapoint->time);
-    transmitByte('\r');
-    transmitByte('\n');
-}
-*/
 
 /*
 static inline void endLogging()
@@ -148,47 +141,13 @@ static inline void endLogging()
 }
 */
 
-/* Adds data */
-void buffer_write(volatile circular_buffer_t *buffer, DataPoint data)
-{
-    // Calculate the next write index
-    uint8_t next_head = (buffer->head + 1) % TX_BUFFER_SIZE;
-    uint8_t buffer_is_full = (next_head == buffer->tail);
-
-    if (!buffer_is_full)
-    {
-        // Update the data at the head pointer
-        buffer->data[buffer->head] = data;
-
-        // Update the head pointer forward, or loop around
-        buffer->head = next_head;
-    }
-}
-DataPoint buffer_get(volatile circular_buffer_t *buffer)
-{
-    DataPoint point = buffer->data[buffer->tail];
-
-    // Update the tail pointer
-    buffer->tail = (buffer->tail + 1) % TX_BUFFER_SIZE;
-
-    return point;
-}
-
-void USART_Transmit(DataPoint data)
-{
-    buffer_write(&tx_buffer, data);
-    // Enable Data Register Empty Interrupt
-    UCSR0B |= (1 << UDRIE0);
-}
 void onEncoderInterrupt()
 {
     updateEncoderState();
     updateEncoderPosition();
 
-    DataPoint datapoint = {TCNT1, encoder.position & 0xFF};
-    USART_Transmit(datapoint);
-
-    TCNT1 = 0;
+    // sDataPoint datapoint = {TCNT1, encoder.position & 0xFF};
+    // USART_Transmit(datapoint);
 }
 ISR(INT0_vect) /* on change of encoder pin A */
 {
@@ -201,36 +160,36 @@ ISR(INT1_vect) /* on change of encoder pin B*/
     onEncoderInterrupt();
 }
 
-ISR(PCINT0_vect)
-{
-    // Debounce first
-    if ((BUTTON_PIN & (1 << BUTTON))) /* If the button has just been pressed */
-    {
-        _delay_ms(DEBOUNCE_TIME);
-        if ((BUTTON_PIN & (1 << BUTTON))) /* Now if it genuinely got pressed */
-        {
-            /* Start the counter again */
-            sei();
-            loggingComplete = 0;
-            TCNT1 = 0;
-        }
-    }
-}
+// ISR(PCINT0_vect)
+// {
+//     // Debounce first
+//     if ((BUTTON_PIN & (1 << BUTTON))) /* If the button has just been pressed */
+// {
+//     _delay_ms(DEBOUNCE_TIME);
+//     if ((BUTTON_PIN & (1 << BUTTON))) /* Now if it genuinely got pressed */
+//     {
+//         /* Start the counter again */
+//         sei();
+//         loggingComplete = 0;
+//         TCNT1 = 0;
+//     }
+// }
+// }
 
 /* Timer1 Compare A match Interrupt Service Routine */
-ISR(TIMER1_COMPA_vect)
-{
+// ISR(TIMER1_COMPA_vect)
+//{
 
-    DataPoint datapoint = {COMPARE_VALUE, encoder.position & 0xFF};
-    USART_Transmit(datapoint);
+// DataPoint datapoint = {COMPARE_VALUE, encoder.position & 0xFF};
+//  USART_Transmit(datapoint);
 
-    // Enable the USART Data Transmit Ready Interrupt, to trigger ISR
-    // UCSR0B |= (1 << UDRIE0);
+// Enable the USART Data Transmit Ready Interrupt, to trigger ISR
+// UCSR0B |= (1 << UDRIE0);
 
-    PORTB ^= (1 << PB1);
-}
+//   PORTB ^= (1 << PB1);
+//}
 
-/* USART Data Register Empty Interrupt Service Routine */
+/* USART Data Register Empty Interrupt Service Routine
 ISR(USART_UDRE_vect)
 {
     static uint8_t byte_index = 0;
@@ -248,7 +207,7 @@ ISR(USART_UDRE_vect)
         current_data = buffer_get(&tx_buffer);
     }
 
-    /*
+
         switch (byte_index)
         {
         case 0:
@@ -273,15 +232,21 @@ ISR(USART_UDRE_vect)
             printByte('\n');
             break;
         }
-        */
 
-    byte_index = (byte_index + 1) % 7;
-    if (byte_index == 0 && buffer_is_empty(&tx_buffer))
-    {
-        UCSR0B &= ~(1 << UDRIE0);
-    }
+
+byte_index = (byte_index + 1) % 7;
+if (byte_index == 0 && buffer_is_empty(&tx_buffer))
+{
+    UCSR0B &= ~(1 << UDRIE0);
 }
+}
+*/
+ISR(BADISR_vect)
+{
 
+    for (;;)
+        UDR0 = '!';
+}
 int main(void)
 {
     // ----------- Inits ----------- //
@@ -291,44 +256,25 @@ int main(void)
     ENCODER_PORT |=
         (1 << ENCODER_A_PIN) | (1 << ENCODER_B_PIN); /* enable pull-up resistors for encoder */
 
-    initButton();
+    // initButton();
     initBasicUSART();
-    initTimer1();
+    // initTimer1();
     initEncoderInterrupts();
-
     sei(); /* enable global interrupts */
 
     //  Full Speed
-    clock_prescale_set(clock_div_1);
+    // clock_prescale_set(clock_div_1);
 
     //  Initialize State with a read
     encoder.state = readEncoderPinState();
 
     // Initialize the buffer head and tail
-    tx_buffer.head = 0;
-    tx_buffer.tail = 0;
+    initBuffer(&tx_buffer);
 
     // ----------- Event Loop ----------- //
 
     while (1)
     {
-        // transmitByte('[');
-
-        // for (int i = 0; i < TX_BUFFER_SIZE; i++)
-        //{
-        //  printWord(tx_buffer.data[i].position);
-        //  transmitByte(' ');
-        /*
-        ** DO LITERALLY NOTHING **😂
-        */
-        // if (!loggingComplete)
-        // {
-        //     DataPoint data;
-
-        //     if (buffer_get(&data))
-        //     {
-        //         printData(&data);
-        //     }
 
         //     /*
         //     if ((TCNT1 > DATA_END_THRESHOLD))
